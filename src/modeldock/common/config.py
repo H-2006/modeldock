@@ -43,6 +43,10 @@ class Settings(BaseModel):
     log_level: str = "ERROR"
     progress_style: str = "rich"
     auto_install: bool = False
+    # "unrestricted" | "warn" | "strict" — how much ModelDock is willing to
+    # execute on the user's behalf. See SECURITY.md, "Model Execution &
+    # Native Code".
+    execution_policy: str = "warn"
     ollama_host: Optional[str] = None
     lmstudio_host: Optional[str] = None
     llamacpp_gpu_layers: Optional[int] = None
@@ -78,6 +82,16 @@ class Settings(BaseModel):
             )
         return value
 
+    @field_validator("execution_policy")
+    @classmethod
+    def _validate_execution_policy(cls, value: str) -> str:
+        allowed = {"unrestricted", "warn", "strict"}
+        if value not in allowed:
+            raise ConfigError(
+                f"Invalid execution_policy {value!r}; expected one of {sorted(allowed)}"
+            )
+        return value
+
     @field_validator("llamacpp_gpu_layers", mode="before")
     @classmethod
     def _validate_llamacpp_gpu_layers(cls, value: Any) -> Optional[int]:
@@ -102,6 +116,7 @@ class Settings(BaseModel):
             f"{_ENV_PREFIX}LOG_LEVEL": self.log_level,
             f"{_ENV_PREFIX}DEFAULT_BACKEND": self.default_backend.value,
             f"{_ENV_PREFIX}CATALOG_SOURCE": self.catalog_source,
+            f"{_ENV_PREFIX}EXECUTION_POLICY": self.execution_policy,
             f"{_ENV_PREFIX}AUTO_INSTALL": str(self.auto_install).lower(),
             f"{_ENV_PREFIX}CACHE_DIR": str(self.cache_dir),
             f"{_ENV_PREFIX}GPT4ALL_MODELS_DIR": ""
@@ -172,6 +187,8 @@ def _apply_mapping(settings: Settings, data: Dict[str, Any], source: str = "conf
         _safe_set(settings, "registry_url", data["registry_url"] or None, source)
     if "catalog_source" in data and data["catalog_source"]:
         _safe_set(settings, "catalog_source", str(data["catalog_source"]), source)
+    if "execution_policy" in data and data["execution_policy"]:
+        _safe_set(settings, "execution_policy", str(data["execution_policy"]), source)
     if "log_level" in data and data["log_level"]:
         _safe_set(settings, "log_level", _coerce_log_level(data["log_level"]), source)
     if "progress_style" in data and data["progress_style"]:
@@ -231,6 +248,7 @@ def load_settings(
         f"{_ENV_PREFIX}CACHE_DIR": "cache_dir",
         f"{_ENV_PREFIX}REGISTRY_URL": "registry_url",
         f"{_ENV_PREFIX}CATALOG_SOURCE": "catalog_source",
+        f"{_ENV_PREFIX}EXECUTION_POLICY": "execution_policy",
         f"{_ENV_PREFIX}LOG_LEVEL": "log_level",
         f"{_ENV_PREFIX}PROGRESS_STYLE": "progress_style",
         f"{_ENV_PREFIX}OLLAMA_HOST": "ollama_host",

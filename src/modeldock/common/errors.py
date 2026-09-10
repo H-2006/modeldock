@@ -84,6 +84,22 @@ class ConfigError(ModelDockError):
         super().__init__(f"Configuration error: {message}")
 
 
+class ExecutionPolicyError(ModelDockError):
+    """An operation was refused by the configured execution policy.
+
+    Raised when ``execution_policy="strict"`` forbids something that would
+    execute code ModelDock cannot vouch for — a third-party plugin, or a
+    backend that loads a model into ModelDock's own process. The message names
+    what was refused and how to allow it deliberately.
+    """
+
+    def __init__(self, what: str, hint: str = "") -> None:
+        message = f"Refused by execution_policy='strict': {what}."
+        if hint:
+            message += f" {hint}"
+        super().__init__(message)
+
+
 class AliasResolutionError(ModelDockError):
     """A friendly model alias could not be resolved to a spec."""
 
@@ -99,5 +115,6 @@ __all__ = [
     "DownloadError",
     "CacheError",
     "ConfigError",
+    "ExecutionPolicyError",
     "AliasResolutionError",
 ]

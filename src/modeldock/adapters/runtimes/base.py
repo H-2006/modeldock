@@ -63,9 +63,22 @@ class BaseRuntime:
     objects.  Never pass raw runtime output to ``exec()``, ``eval()``,
     ``subprocess``, or any code-execution primitive.  See SECURITY.md for
     the full prompt-injection guidance.
+
+    ``get_model_client`` and ``run`` are the *execution* boundary: past them a
+    runtime loads model weights and executes them as native code with the
+    invoking user's full privileges.  Adapters declare which side of that
+    boundary they sit on via ``executes_in_process``; the policy decision
+    itself lives in ``core/execution.py``, never in an adapter.
     """
 
     backend: RuntimeBackend = RuntimeBackend.OLLAMA
+
+    #: True when this adapter loads model weights into ModelDock's own Python
+    #: process (a native extension or ctypes binding) instead of talking to a
+    #: separate runtime server. Consulted by ``ExecutionGuard``: once native
+    #: code is mapped into this process, Python can no longer restrain it, so
+    #: ``execution_policy="strict"`` refuses these adapters outright.
+    executes_in_process: bool = False
 
     def __init__(self) -> None:
         self._logger = get_logger(f"runtime.{self.backend.value}")

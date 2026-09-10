@@ -16,10 +16,11 @@ ModelDock is zero-config by default. Customize when needed.
 ## Config File Format
 
 ```toml
-default_backend = "ollama"
-auto_install    = true
-log_level       = "INFO"
-progress_style  = "rich"
+default_backend  = "ollama"
+auto_install     = true
+log_level        = "INFO"
+progress_style   = "rich"
+execution_policy = "warn"
 ```
 
 ---
@@ -35,6 +36,7 @@ Override config with `MODELDOCK_*` env vars:
 | `MODELDOCK_AUTO_INSTALL` | Auto-download missing models | `false` |
 | `MODELDOCK_CACHE_DIR` | Override cache location | platform default |
 | `MODELDOCK_CATALOG_SOURCE` | `auto`/`ollama`/`bundled` | `auto` |
+| `MODELDOCK_EXECUTION_POLICY` | `unrestricted`/`warn`/`strict` | `warn` |
 
 ---
 
@@ -98,6 +100,26 @@ Control which registry is used:
 | `bundled` | Static catalog.json only — fully offline |
 
 Set via config file or `MODELDOCK_CATALOG_SOURCE` env var.
+
+---
+
+## Restricted Execution
+
+Loading a model makes a runtime execute it as native code with your user
+account's full privileges. `execution_policy` controls how much ModelDock is
+willing to do on your behalf:
+
+| Value | Behavior |
+|-------|----------|
+| `warn` | Warn once per session before a model is executed (default) |
+| `unrestricted` | No warning; previous behavior |
+| `strict` | Also refuse third-party plugins and in-process model loading |
+
+`strict` is not a sandbox — it restricts what ModelDock's own process executes,
+not what a runtime server does with your model. Set via config file or
+`MODELDOCK_EXECUTION_POLICY`. See
+[SECURITY.md](https://github.com/OpenAgentHQ/modeldock/blob/main/SECURITY.md)
+for how to confine the runtime itself.
 
 ---
 

@@ -106,6 +106,115 @@ If you embed ModelDock in a larger agent, copilot, or automation pipeline:
 
 ---
 
+## Model Execution & Native Code
+
+### Threat Model
+
+ModelDock does not perform inference itself. `load()` and `run()` hand a model
+to a runtime — Ollama, LM Studio, llama.cpp and others — which loads the
+weights and executes them as **native machine code**, in a process owned by
+the user who invoked ModelDock, with that user's full privileges.
+
+A model artifact is therefore not inert data:
+
+- **Weight files are parsed by native C/C++ loaders.** A malformed GGUF header
+  is a memory-safety bug in that loader, not a Python exception you can catch.
+- **Some formats carry executable content by construction.** Pickle-based
+  `.bin` checkpoints deserialize arbitrary Python objects; repositories that
+  ship custom operators or conversion scripts execute code by design.
+- **Model metadata drives the runtime.** Chat templates and tokenizer
+  configuration embedded in a model file are interpreted by the runtime, not
+  validated by ModelDock.
+- **A runtime is a separate program.** Once ModelDock has asked it to load a
+  model, ModelDock has no further control over what that process reads,
+  writes, or connects to.
+- **Installed plugins run inside ModelDock itself.** Any distribution that
+  advertises a `modeldock.runtimes`, `modeldock.model_sources`, or
+  `modeldock.catalog_providers` entry point is imported *and instantiated* in
+  ModelDock's own process the moment a registry is built. Installing such a
+  package is equivalent to granting it arbitrary code execution.
+
+**ModelDock cannot sandbox any of this.** Python cannot confine a native
+library already mapped into its address space, and it cannot restrain a server
+process it does not supervise. Real containment comes from the operating
+system. What ModelDock *can* do is decline to take part, and tell you when it
+is about to — which is what the setting below controls.
+
+### The `execution_policy` Setting
+
+Set it in `config.toml`, or as `MODELDOCK_EXECUTION_POLICY`:
+
+| Value | Warns about native execution | Third-party plugins | Backends that load models in-process |
+|-------|------------------------------|---------------------|--------------------------------------|
+| `unrestricted` | No | Loaded | Allowed |
+| `warn` (default) | Once per session | Loaded | Allowed |
+| `strict` | Once per session | **Not imported or executed** | **Refused** |
+
+Be clear about what `strict` does and does not buy you. It is not a sandbox.
+It restricts what *ModelDock's own process* will execute: no third-party
+plugin code, and no backend that maps model weights into that process. A
+runtime server such as Ollama or llama-server still runs your model with your
+full privileges — `strict` does not change that, and cannot. Confine the
+runtime with the operating system, as below.
+
+### Rules
+
+1. **Treat a model file as a program, not a document.** Apply the same
+   scrutiny to its origin that you would to an executable you downloaded.
+2. **Prefer runtimes that execute out-of-process.** A separate server process
+   can be confined by the OS; a native library inside your own interpreter
+   cannot.
+3. **Never install a ModelDock plugin you would not accept as arbitrary code.**
+   Entry-point discovery grants it exactly that. Use `execution_policy =
+   "strict"` when running untrusted or unaudited environments.
+4. **Do not rely on ModelDock for isolation.** It reports and refuses; it does
+   not contain.
+
+### Running a Model in a Restricted Context
+
+Confine the *runtime*, not ModelDock. A reasonable baseline, using Ollama as
+the example — the same shape applies to `llama-server` and LM Studio:
+
+```bash
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --read-only --tmpfs /tmp \
+  --cap-drop ALL --security-opt no-new-privileges \
+  -v "$PWD/models:/models:ro" \
+  -p 127.0.0.1:11434:11434 \
+  ollama/ollama
+```
+
+What each part is for:
+
+- `--user` — never run the runtime as root.
+- `--read-only` plus a read-only model mount — the model directory is the only
+  filesystem the runtime needs, and it does not need to write to it.
+- `--cap-drop ALL`, `--security-opt no-new-privileges` — inference needs no
+  capabilities.
+- `-p 127.0.0.1:...` — bind the API to loopback so it is not exposed to the
+  network. Add `--network none` once the model is downloaded if the runtime
+  does not need to fetch anything at inference time.
+
+Then point ModelDock at it (`ollama_host`, `lmstudio_host`, or
+`MODELDOCK_OLLAMA_HOST`) and set `execution_policy = "strict"` so ModelDock
+itself executes nothing beyond its own shipped code.
+
+If you launch `llama-server` directly, note that ModelDock only ever *suggests*
+that command in an error hint — it never runs it for you. Apply the same
+confinement to the command you actually run.
+
+### Guidance for Contributors
+
+- A runtime adapter must not spawn a model process without documenting it.
+  Today every shipped adapter is an HTTP client to a server the user started.
+- Declare `executes_in_process = True` on any adapter that loads weights into
+  ModelDock's interpreter, so `strict` can refuse it.
+- The execution policy is decided once, in `core/execution.py`. Do not
+  re-implement or bypass it in an adapter or in the CLI.
+
+---
+
 ## Contact
 
 - **Email**: opensource@openagenthq.com

@@ -9,7 +9,7 @@ Architecture.md §5.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List, Optional, cast
+from typing import Any, Callable, List, Optional, cast
 
 from modeldock.adapters.downloaders.factory import needs_http_download
 from modeldock.adapters.downloaders.http import HttpDownloader
@@ -25,6 +25,7 @@ from modeldock.common.logging import get_logger
 from modeldock.core.cache import CacheService
 from modeldock.core.config import ConfigService
 from modeldock.core.download import DownloadService
+from modeldock.core.execution import ExecutionGuard
 from modeldock.core.lifecycle import LifecycleOrchestrator
 from modeldock.core.registry import RegistryService
 from modeldock.domain.model import (
@@ -56,6 +57,7 @@ class ModelManager:
         cache: Optional[CachePort] = None,
         events: Optional[EventPort] = None,
         settings: Optional[Settings] = None,
+        notify: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._logger = get_logger("core.manager")
         # ``settings`` carries only the caller's deliberate overrides. Dumping it
@@ -69,8 +71,13 @@ class ModelManager:
         cfg = self._config.settings
         self._backend = backend or cfg.default_backend
 
+        # Built before anything that could execute third-party code: both
+        # registries below discover entry points, and the guard decides whether
+        # that discovery may run at all.
+        self._guard = ExecutionGuard(cfg.execution_policy, notify=notify)
+
         self._registry_port = registry or self._resolve_registry(cfg)
-        self._runtime_registry = RuntimeRegistry()
+        self._runtime_registry = RuntimeRegistry(allow_plugins=self._guard.allows_plugins())
         self._runtime = runtime or self._resolve_runtime(self._backend, cfg)
 
         self._cache_port = cache or self._default_cache(cfg)
@@ -87,6 +94,7 @@ class ModelManager:
             self._progress,
             events,
             auto_install=cfg.auto_install,
+            guard=self._guard,
         )
 
     # --- resolution helpers ----------------------------------------------
@@ -153,7 +161,9 @@ class ModelManager:
         """
         from modeldock.adapters.registry.catalog_registry import CatalogProviderRegistry
 
-        return CatalogProviderRegistry().get(self._backend, cfg.cache_dir)
+        return CatalogProviderRegistry(allow_plugins=self._guard.allows_plugins()).get(
+            self._backend, cfg.cache_dir
+        )
 
     #: Config field holding the host override for each backend that has one.
     _HOST_SETTING_FOR = {
@@ -452,8 +462,14 @@ class ModelManager:
         self._runtime.remove(ref)
 
     def run(self, name: str, prompt: Optional[str] = None, **opts: Any) -> Any:
-        """Run an interactive session for a model in the active runtime."""
+        """Run an interactive session for a model in the active runtime.
+
+        ``run`` does not go through ``LifecycleOrchestrator``, so the execution
+        policy is applied here explicitly — otherwise ``run`` would be the one
+        path that executes a model without it.
+        """
         ref = ModelRef.parse(name, backend=self._backend)
+        self._guard.check(ref, self._runtime)
         return self._runtime.run(ref, prompt=prompt, **opts)
 
     def verify(self, name: str) -> bool:

@@ -119,7 +119,21 @@ extending a runtime adapter, keep the following in mind:
   mislead downstream tooling in agent/copilot pipelines. Treat it as
   adversarial user input.
 
-See [SECURITY.md](https://github.com/OpenAgentHQ/modeldock/blob/main/SECURITY.md) for the full prompt-injection guidance.
+### Native Code & the Execution Boundary
+
+`get_model_client()` and `run()` are a second, different boundary: past them a
+runtime loads model weights and executes them as native code with the invoking
+user's full privileges. ModelDock cannot sandbox that. When writing an adapter:
+
+- **Document how the model process is started and confined.** Every shipped
+  adapter is an HTTP client to a server the user launched; an adapter that
+  spawns a process itself must say so.
+- **Declare `executes_in_process = True`** if the adapter loads weights into
+  ModelDock's own interpreter, so `execution_policy="strict"` can refuse it.
+- **Do not implement the policy yourself.** It is decided once, in
+  `core/execution.py`, so `load` and `run` cannot diverge.
+
+See [SECURITY.md](https://github.com/OpenAgentHQ/modeldock/blob/main/SECURITY.md) for the full prompt-injection and model-execution guidance.
 ---
 
 ## Next Steps

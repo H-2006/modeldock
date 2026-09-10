@@ -14,6 +14,9 @@ class VllmRuntime(BaseRuntime):
     """Planned runtime adapter for vLLM."""
 
     backend: RuntimeBackend = RuntimeBackend.VLLM
+    # Loads weights into this process through a native extension rather than
+    # driving a separate server, so ``execution_policy="strict"`` refuses it.
+    executes_in_process: bool = True
 
     def _check_available(self) -> bool:
         return False

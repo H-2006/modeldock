@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from modeldock.cli.console import print_warning
 from modeldock.common.errors import ConfigError
 from modeldock.core.manager import ModelManager
 from modeldock.domain.model import RuntimeBackend
@@ -25,11 +26,16 @@ def resolve_backend(backend: Optional[str]) -> Optional[RuntimeBackend]:
 
 
 def manager_for(backend: Optional[str] = None) -> ModelManager:
-    """Build a ``ModelManager`` for the requested backend (config default if None)."""
+    """Build a ``ModelManager`` for the requested backend (config default if None).
+
+    Supplies the CLI's warning channel: the execution policy itself is decided
+    in ``core``, but only an interactive front end should print to the user, so
+    the library stays silent unless a caller opts in like this.
+    """
     resolved = resolve_backend(backend)
     if resolved is None:
-        return ModelManager()
-    return ModelManager(backend=resolved)
+        return ModelManager(notify=print_warning)
+    return ModelManager(backend=resolved, notify=print_warning)
 
 
 __all__ = ["manager_for", "resolve_backend"]
