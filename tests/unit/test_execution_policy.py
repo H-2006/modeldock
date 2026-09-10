@@ -34,14 +34,29 @@ class _InProcessRuntime(FakeRuntime):
     executes_in_process = True
 
 
-def _fake_entry_point(name: str, target: Any, dist: str = "third-party-pkg") -> MagicMock:
+def _fake_entry_point(
+    name: str,
+    target: Any,
+    dist: str = "third-party-pkg",
+    value: str = "third_party_pkg.runtime:Runtime",
+) -> MagicMock:
     ep = MagicMock()
     ep.name = name
+    ep.value = value
     ep.load.return_value = target
     # Provenance decides whether a registration is a security event; the
     # default here is a foreign distribution, since that is the case worth
     # testing.
     ep.dist.name = dist
+    return ep
+
+
+def _entry_point_without_dist(name: str, target: Any, value: str) -> MagicMock:
+    """An entry point shaped like Python 3.9's, which carries no distribution."""
+    ep = MagicMock(spec=["name", "value", "load"])
+    ep.name = name
+    ep.value = value
+    ep.load.return_value = target
     return ep
 
 
@@ -189,7 +204,7 @@ def test_runtime_plugin_code_never_executes_when_disallowed() -> None:
 
 def test_runtime_plugins_load_when_allowed() -> None:
     """The gate must be a gate, not a permanent block."""
-    plugin = _fake_entry_point("vllm", lambda: FakeRuntime())
+    plugin = _fake_entry_point("vllm", FakeRuntime)
 
     with patch(
         "modeldock.adapters.runtimes.registry.entry_points",
@@ -210,7 +225,7 @@ def test_a_plugin_shadowing_a_builtin_is_logged(
     # ``at_level(..., logger="modeldock")`` lifts that logger's ERROR level so a
     # WARNING is not filtered before it propagates.
     monkeypatch.setattr(logging.getLogger("modeldock"), "propagate", True)
-    plugin = _fake_entry_point("ollama", lambda: FakeRuntime())
+    plugin = _fake_entry_point("ollama", FakeRuntime)
 
     with (
         patch(
@@ -234,7 +249,7 @@ def test_modeldocks_own_entry_point_does_not_warn(
     ignore the warning that actually matters.
     """
     monkeypatch.setattr(logging.getLogger("modeldock"), "propagate", True)
-    plugin = _fake_entry_point("ollama", lambda: FakeRuntime(), dist="modeldock")
+    plugin = _fake_entry_point("ollama", FakeRuntime, dist="modeldock")
 
     with (
         patch(
@@ -246,6 +261,50 @@ def test_modeldocks_own_entry_point_does_not_warn(
         RuntimeRegistry(allow_plugins=True)
 
     assert caplog.text == ""
+
+
+def test_first_party_detection_survives_a_missing_distribution(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Python 3.9's EntryPoint has no ``dist``; provenance falls back to the target.
+
+    Without the fallback, every 3.9 invocation warns about ModelDock's own
+    ``ollama`` entry point.
+    """
+    monkeypatch.setattr(logging.getLogger("modeldock"), "propagate", True)
+    plugin = _entry_point_without_dist(
+        "ollama", FakeRuntime, "modeldock.adapters.runtimes.ollama:OllamaRuntime"
+    )
+
+    with (
+        patch(
+            "modeldock.adapters.runtimes.registry.entry_points",
+            return_value=_patched_entry_points([plugin]),
+        ),
+        caplog.at_level("WARNING", logger="modeldock"),
+    ):
+        RuntimeRegistry(allow_plugins=True)
+
+    assert caplog.text == ""
+
+
+def test_a_foreign_plugin_without_a_distribution_still_warns(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The 3.9 fallback must not become a blanket exemption."""
+    monkeypatch.setattr(logging.getLogger("modeldock"), "propagate", True)
+    plugin = _entry_point_without_dist("ollama", FakeRuntime, "evil_pkg.runtime:Evil")
+
+    with (
+        patch(
+            "modeldock.adapters.runtimes.registry.entry_points",
+            return_value=_patched_entry_points([plugin]),
+        ),
+        caplog.at_level("WARNING", logger="modeldock"),
+    ):
+        RuntimeRegistry(allow_plugins=True)
+
+    assert "replaces the built-in ollama adapter" in caplog.text
 
 
 def test_a_real_registry_construction_is_quiet(

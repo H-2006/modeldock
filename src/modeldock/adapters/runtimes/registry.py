@@ -26,16 +26,37 @@ _OWN_DISTRIBUTION = "modeldock"
 def _distribution_name(ep: Any) -> str:
     """Return the distribution that provides ``ep``, or "" when unknown.
 
-    ``EntryPoint.dist`` is only populated for entry points obtained from
-    ``entry_points()``, and is absent on older interpreters, so this degrades
-    to "" rather than assuming provenance it cannot establish.
+    ``EntryPoint.dist`` does not exist at all before Python 3.10, and even
+    where it does it is only populated for entry points obtained from
+    ``entry_points()``. This degrades to "" rather than asserting provenance it
+    cannot establish.
     """
     return str(getattr(getattr(ep, "dist", None), "name", "") or "")
 
 
+def _target_root_package(ep: Any) -> str:
+    """Return the top-level package ``ep`` resolves into, or "".
+
+    ``"modeldock.adapters.runtimes.ollama:OllamaRuntime"`` -> ``"modeldock"``.
+    """
+    module = str(getattr(ep, "value", "") or "").split(":", 1)[0]
+    return module.strip().split(".", 1)[0]
+
+
 def _is_first_party(ep: Any) -> bool:
-    """Whether ``ep`` was advertised by ModelDock's own distribution."""
-    return _distribution_name(ep).replace("_", "-").lower() == _OWN_DISTRIBUTION
+    """Whether ``ep`` was advertised by ModelDock itself.
+
+    The distribution name is exact, so it is preferred where available. On
+    Python 3.9 ``EntryPoint`` carries no distribution at all, so fall back to
+    where the entry point actually points: one resolving into the ``modeldock``
+    package is our own registration, not a third-party override. Without this
+    fallback every 3.9 invocation warns about ModelDock's own ``ollama`` entry
+    point — exactly the false alarm this check exists to prevent.
+    """
+    distribution = _distribution_name(ep)
+    if distribution:
+        return distribution.replace("_", "-").lower() == _OWN_DISTRIBUTION
+    return _target_root_package(ep) == _OWN_DISTRIBUTION
 
 
 def _register_builtins() -> None:
