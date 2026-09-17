@@ -361,11 +361,17 @@ modeldock --help
 - **Format:** TOML for the file (human-friendly, stdlib `tomllib` in 3.11+).
 - **Model:** a frozen `Settings` dataclass/pydantic model: `default_backend`,
   `cache_dir`, `registry_url`, `catalog_source`, `log_level`, `progress_style`,
-  `auto_install`, `ollama_host`, etc.
+  `auto_install`, `execution_policy`, `ollama_host`, etc.
 - **Cross-platform paths:** resolved via `common/platform.py` using
   `platformdirs` (the de-facto standard for user/config/cache dirs across OSes).
 - **Validation:** config loaded through a validator; unknown keys warn, invalid
   values fall back to defaults with a logged warning (never crash on bad config).
+- **Execution policy:** `execution_policy` (`unrestricted` | `warn` | `strict`)
+  is the one restricted-execution knob. It is applied in `core/execution.py`
+  (`ExecutionGuard`), which both `LifecycleOrchestrator.load` and
+  `ModelManager.run` consult, and which gates entry-point plugin discovery in
+  `RuntimeRegistry`/`CatalogProviderRegistry`. Adapters never implement it.
+  See SECURITY.md, "Model Execution & Native Code".
 
 ---
 

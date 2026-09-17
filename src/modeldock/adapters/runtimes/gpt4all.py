@@ -19,6 +19,9 @@ class Gpt4AllRuntime(BaseRuntime):
     """Discover models already present in a GPT4All models directory."""
 
     backend: RuntimeBackend = RuntimeBackend.GPT4ALL
+    # Loads weights into this process through a native extension rather than
+    # driving a separate server, so ``execution_policy="strict"`` refuses it.
+    executes_in_process: bool = True
 
     def __init__(self, models_dir: Path | None = None) -> None:
         super().__init__()

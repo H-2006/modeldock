@@ -70,6 +70,18 @@ def print_error(exc: Exception, debug: bool = False, as_json: bool = False) -> N
         traceback.print_exc()
 
 
+def print_warning(message: str) -> None:
+    """Print a security/advisory warning to stderr.
+
+    Always stderr, never stdout: a warning must not land in the middle of
+    ``--json`` output or piped model tokens, which is exactly where the
+    native-code notice would otherwise appear.
+    """
+    import sys
+
+    sys.stderr.write(f"Warning: {message}\n")
+
+
 def render_models(models: List[Any]) -> None:
     """Render a list of ModelSpec as a rich table."""
     from rich.console import Console

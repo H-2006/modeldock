@@ -23,6 +23,7 @@ def config_show(debug: bool = typer.Option(False, "--debug", help="Show tracebac
         typer.echo(f"log_level:       {settings.log_level}")
         typer.echo(f"progress_style:  {settings.progress_style}")
         typer.echo(f"auto_install:    {settings.auto_install}")
+        typer.echo(f"execution_policy: {settings.execution_policy}")
         typer.echo(f"ollama_host:     {settings.ollama_host}")
         typer.echo(f"lmstudio_host:   {settings.lmstudio_host}")
         typer.echo(f"llamacpp_gpu_layers: {settings.llamacpp_gpu_layers}")

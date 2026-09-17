@@ -6,6 +6,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- `execution_policy` setting (`unrestricted` | `warn` | `strict`, default
+  `warn`) — the restricted-execution context for issue #139. Configurable via
+  `config.toml`, `MODELDOCK_EXECUTION_POLICY`, and `modeldock config show`.
+- `ExecutionGuard` (`core/execution.py`) — the single place the policy is
+  applied, consulted by both `LifecycleOrchestrator.load` and
+  `ModelManager.run` so the two execution entry points cannot diverge.
+- A one-per-session warning, before a model is executed, that the runtime runs
+  it as native code with the user's full privileges and that ModelDock does not
+  sandbox it. Delivered to stderr by the CLI via a new
+  `cli.console.print_warning`; the SDK stays silent unless a caller passes
+  `ModelManager(notify=...)`.
+- `execution_policy="strict"` refuses third-party entry-point plugins
+  (`modeldock.runtimes`, `modeldock.model_sources`,
+  `modeldock.catalog_providers`) — they are not imported or instantiated at
+  all — and refuses backends that load model weights into ModelDock's own
+  process, raising the new typed `ExecutionPolicyError`.
+- `BaseRuntime.executes_in_process`, declaring whether an adapter loads weights
+  into ModelDock's interpreter rather than driving a separate server. Shipped
+  HTTP-backed adapters are `False`; `gpt4all` and `vllm` declare `True`.
+- SECURITY.md and `docs/project/security.md` — a "Model Execution & Native
+  Code" section: threat model for model artifacts and plugins, what
+  `execution_policy` does and does not enforce, and a concrete container recipe
+  for confining the runtime itself.
+
+### Changed
+
+- `RuntimeRegistry` and `CatalogProviderRegistry` take `allow_plugins`, and log
+  plugin provenance: a plugin that shadows a built-in adapter is reported at
+  WARNING, since nothing else revealed that the shipped adapter was replaced.
+- `RuntimeRegistry` imports `entry_points` at module scope, matching
+  `CatalogProviderRegistry` and making the discovery call site visible.
+- `RuntimeRegistry.detect_available` logs why a backend failed to probe instead
+  of discarding the exception silently.
+
+### Fixed
+
+- `tests/unit/test_security.py` resolved its source root to a directory that
+  does not exist, so the no-shell-execution audit walked **zero** files and
+  passed vacuously. It now walks `src/modeldock/{adapters,common}`, and a new
+  test asserts the file list is non-empty so it cannot silently degrade again.
+- `test_model_names_are_treated_as_data` asserted a string literal against
+  itself; it now routes the hostile name through `ModelRef.parse`.
+
 ## [0.2.0] - 2026-08-28
 
 Live GGUF catalogs, composite registry, third-party catalog plugins, and

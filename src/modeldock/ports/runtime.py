@@ -31,6 +31,12 @@ class RuntimePort(Protocol):
     validate and sanitise all responses before constructing domain objects.
     Consumers must never execute, ``eval()``, or otherwise treat port output
     as trusted instructions.  See SECURITY.md for full guidance.
+
+    ``get_model_client`` and ``run`` additionally cross an *execution*
+    boundary: they cause a runtime to load a model artifact and execute it as
+    native code with the invoking user's full privileges.  ModelDock cannot
+    sandbox that; it can only warn or refuse, which ``core.execution`` does on
+    every caller's behalf.  See SECURITY.md, "Model Execution & Native Code".
     """
 
     @property

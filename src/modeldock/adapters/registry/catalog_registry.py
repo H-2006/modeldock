@@ -49,13 +49,23 @@ class CatalogProviderRegistry:
     only ``cache_dir``. Entry points take priority over built-ins, so a
     plugin can also replace the shipped Hugging Face provider for LM
     Studio/llama.cpp if it wants to.
+
+    Security Note
+    -------------
+    ``ep.load()`` imports third-party code into ModelDock's own process at
+    construction time, so installing a catalog-provider plugin grants it
+    arbitrary code execution. Pass ``allow_plugins=False`` (what
+    ``execution_policy="strict"`` does) to skip discovery entirely.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, allow_plugins: bool = True) -> None:
         self._logger = get_logger("registry.catalog_provider_registry")
         _register_builtins()
         self._entry_points: Dict[RuntimeBackend, Callable[[Path], RegistryPort]] = {}
-        self._discover_entry_points()
+        if allow_plugins:
+            self._discover_entry_points()
+        else:
+            self._logger.debug("Catalog provider plugin discovery disabled by execution policy")
 
     def _discover_entry_points(self) -> None:
         try:

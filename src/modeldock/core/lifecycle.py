@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from modeldock.common.errors import ModelNotFoundError, ModelNotInstalledError
 from modeldock.common.logging import get_logger
+from modeldock.core.execution import ExecutionGuard
 from modeldock.domain.model import ModelRef, ModelSpec
 from modeldock.ports.cache import CachePort
 from modeldock.ports.events import EventPort
@@ -25,6 +26,7 @@ class LifecycleOrchestrator:
         progress: Optional[ProgressPort] = None,
         events: Optional[EventPort] = None,
         auto_install: bool = False,
+        guard: Optional[ExecutionGuard] = None,
     ) -> None:
         self._runtime = runtime
         self._registry = registry
@@ -32,6 +34,10 @@ class LifecycleOrchestrator:
         self._progress = progress
         self._events = events
         self._auto_install = auto_install
+        # Default rather than optional: a caller who builds the orchestrator
+        # directly still gets the shipped policy instead of silently opting out
+        # of it.
+        self._guard = guard or ExecutionGuard()
         self._logger = get_logger("core.lifecycle")
 
     def load(self, name: str, auto_install: Optional[bool] = None) -> Any:
@@ -56,6 +62,10 @@ class LifecycleOrchestrator:
             if ev is not None:
                 ev.after_install(ref, None)
 
+        # The execution boundary: past this call the runtime loads and runs
+        # the model as native code. Checked here, and in ModelManager.run, so
+        # both entry points share one policy.
+        self._guard.check(ref, self._runtime)
         return self._runtime.get_model_client(ref)
 
     def _resolve(self, ref: ModelRef) -> ModelSpec:
