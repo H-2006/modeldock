@@ -6,10 +6,15 @@ import typer
 
 from modeldock.cli.console import print_error
 from modeldock.cli.factory import manager_for
+from modeldock.domain.model import Category
+
+_CATEGORY_HELP: str = "Category name. Available: " + "; ".join(
+    f"{item.value} ({item.description})" for item in Category
+)
 
 
 def install_category_cmd(
-    category: str = typer.Argument(..., help="Category name (e.g. coding)"),
+    category: str = typer.Argument(..., help=_CATEGORY_HELP),
     backend: str = typer.Option(None, "--backend", help="Runtime backend"),
     debug: bool = typer.Option(False, "--debug", help="Show traceback"),
 ) -> None:
