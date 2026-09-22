@@ -243,9 +243,14 @@ class ModelManager:
         back to a minimal ``ModelInfo`` built from the local reference.
         """
         ref = ModelRef.parse(name)
-        installed_tags = [
-            existing.tag for existing in self._runtime.list_installed() if existing.name == ref.name
-        ]
+        try:
+            installed_tags = [
+                existing.tag for existing in self._runtime.list_installed() if existing.name == ref.name
+            ]
+        except Exception:
+            # Runtime is offline or unreachable - default to no installed tags
+            installed_tags = []
+
         try:
             return self._registry.info(name, installed_tags=installed_tags)
         except ModelNotFoundError:
@@ -254,7 +259,7 @@ class ModelManager:
             if installed_tags:
                 return ModelInfo.from_ref(ref, installed_tags)
             raise
-
+    
     def categories(self) -> List[Category]:
         """Return all catalog categories."""
         return self._registry.categories()
